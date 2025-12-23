@@ -40,7 +40,8 @@ mouse.pixelRatio = render.options.pixelRatio || window.devicePixelRatio;
 const mouseConstraint = MouseConstraint.create(engine, {
   mouse,
   constraint: {
-    stiffness: 0.25,
+    stiffness: 0.9,
+    damping: 0.2,
     render: { visible: false }
   }
 });
@@ -66,11 +67,13 @@ Events.on(mouseConstraint, "startdrag", (e) => {
     return;
   }
   draggingBody = e.body;
+  constraints.forEach(c=>{ if(c.baseStiffness!=null){ c.stiffness = c.baseStiffness * 0.15; } });
   if(instructionActive){ instructions.style.opacity = 0; instructionActive = false; }
 });
 
 Events.on(mouseConstraint, "enddrag", () => {
   console.log("End drag");
+  constraints.forEach(c=>{ if(c.baseStiffness!=null){ c.stiffness = c.baseStiffness; } });
   draggingBody = null;
 });
 
@@ -166,6 +169,7 @@ function createConstraint(aIndex,bIndex,baseStiff,slack){
   const stiffness = baseStiff / Math.max(1, weightFactor);
   const damping = 0.08 + weightFactor*0.02;
   const c = Constraint.create({ bodyA:a, bodyB:b, length, stiffness, damping, render:{ visible:false } });
+  c.baseStiffness = stiffness;
   c.restLength = length;
   c.maxLength = length * slack * (a.nodeType==='heavy'||b.nodeType==='heavy' ? 1.08 : 1.2);
   c.vibration = 0;
