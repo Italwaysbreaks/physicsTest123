@@ -32,11 +32,51 @@ const hint = document.getElementById('hint');
 const instructions = document.getElementById('instructions');
 let width = window.innerWidth, height = window.innerHeight;
 const engine = Engine.create({ gravity: { x: 0, y: 0 }, enableSleeping: false });
+const world = engine.world;
 const render = Render.create({ canvas, engine, options: { width, height, background: '#0e0e11', wireframes: false, pixelRatio: window.devicePixelRatio || 1 } });
+const mouse = Mouse.create(render.canvas);
+mouse.pixelRatio = render.options.pixelRatio || window.devicePixelRatio;
+
+const mouseConstraint = MouseConstraint.create(engine, {
+  mouse,
+  constraint: {
+    stiffness: 0.25,
+    render: { visible: false }
+  }
+});
+
+Composite.add(world, mouseConstraint);
+render.mouse = mouse;
+render.canvas.style.pointerEvents = "auto";
+Events.on(mouseConstraint, "mousedown", () => {
+  Matter.Composite.allBodies(world).forEach(body => {
+    Matter.Sleeping.set(body, false);
+  });
+});
+
+Events.on(mouseConstraint, "mousedown", () => {
+  console.log("Mouse down detected");
+});
+
+Events.on(mouseConstraint, "startdrag", (e) => {
+  console.log("Start drag:", e && e.body ? e.body.label : "no body");
+  if(!e.body) return;
+  if(e.body.label === "core"){
+    mouseConstraint.constraint.bodyB = null;
+    return;
+  }
+  draggingBody = e.body;
+  if(instructionActive){ instructions.style.opacity = 0; instructionActive = false; }
+});
+
+Events.on(mouseConstraint, "enddrag", () => {
+  console.log("End drag");
+  draggingBody = null;
+});
+
 Render.run(render);
 const runner = Runner.create();
 Runner.run(runner, engine);
-const world = engine.world;
 const typeConfig = {
   core: { radius: 52, color: '#1a1c21', mass: 50, damping: 0.25, static: true },
   light: { radius: 20, color: '#dce2f5', mass: 3, damping: 0.02 },
@@ -50,6 +90,13 @@ const instructionTexts = [
   "Some connections will break if pushed too far.",
   "Balance everything."
 ];
+
+const debugBody = Bodies.rectangle(300, 300, 80, 80, {
+  label: "debug",
+  isStatic: false,
+  frictionAir: 0.02,
+  render: { fillStyle: "#ff0000" }
+});
 
 const levels = [
   { zone: { x: () => width*0.78, y: () => height*0.45, r: 120 }, goal: 1, nodes: [
@@ -100,24 +147,6 @@ const levels = [
 ];
 let bodies = [], constraints = [], debris = [];
 let draggingBody = null, currentLevel = 0, state = 'playing', instructionActive = false;
-const mouse = Mouse.create(render.canvas);
-mouse.element = render.canvas;
-mouse.pixelRatio = render.options.pixelRatio || window.devicePixelRatio;
-const mouseConstraint = MouseConstraint.create(engine, { mouse, constraint: { stiffness: 0.2, damping: 0.25, render: { visible:false } } });
-Composite.add(world, mouseConstraint);
-render.mouse = mouse;
-Events.on(mouseConstraint, 'startdrag', e => {
-  const target = e.body;
-  if(!target) return;
-  if(target.label === 'core' || target === coreBody){
-    mouseConstraint.body = null;
-    mouseConstraint.constraint.bodyB = null;
-    return;
-  }
-  draggingBody = target;
-  if(instructionActive){ instructions.style.opacity = 0; instructionActive = false; }
-});
-Events.on(mouseConstraint, 'enddrag', () => { draggingBody = null; });
 let coreBody = null;
 function createNode(def){
   const cfg = typeConfig[def.type];
@@ -152,6 +181,7 @@ function buildLevel(idx){
   const def = levels[idx];
   def.nodes.forEach(n=>{ const body=createNode(n); bodies.push(body); });
   bodies.forEach(b=>Composite.add(world,b));
+  Composite.add(world, debugBody);
   coreBody = bodies.find(b=>b.nodeType==='core');
   def.links.forEach(([a,b])=>createConstraint(a,b, def.stiffness, def.slack));
   engine.gravity.y = 0;
