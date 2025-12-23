@@ -3,130 +3,192 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Fragile Network</title>
+<title>Fragile Network Puzzle</title>
 <style>
 :root { color-scheme: dark; }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0e0e11; font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif; }
 #canvas { display: block; background: #0e0e11; }
-.overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #e8e9ee; font-size: 22px; letter-spacing: 0.4px; opacity: 0; transition: opacity 0.6s ease; pointer-events: none; text-shadow: 0 6px 30px rgba(0,0,0,0.35); text-align: center; }
+.overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #e8e9ee; font-size: 24px; letter-spacing: 0.5px; opacity: 0; transition: opacity 0.5s ease; pointer-events: none; text-shadow: 0 8px 40px rgba(0,0,0,0.45); text-align: center; }
+.hint { position: fixed; bottom: 22px; left: 24px; color: #9fa4b4; font-size: 14px; letter-spacing: 0.4px; opacity: 0.8; }
+#levelInfo { position: fixed; top: 18px; left: 22px; color: #cfd3df; font-size: 15px; letter-spacing: 0.3px; opacity: 0.9; }
 </style>
 </head>
 <body>
 <canvas id="canvas"></canvas>
-<div id="statusText" class="overlay">Stability compromised.</div>
+<div id="overlay" class="overlay"></div>
+<div id="levelInfo"></div>
+<div id="hint" class="hint"></div>
 <script src="https://cdn.jsdelivr.net/npm/matter-js@0.20.0/build/matter.min.js"></script>
 <script>
 const { Engine, Render, Runner, Bodies, Body, Composite, Constraint, Mouse, MouseConstraint, Events, Vector } = Matter;
 const canvas = document.getElementById('canvas');
-const statusText = document.getElementById('statusText');
+const overlay = document.getElementById('overlay');
+const levelInfo = document.getElementById('levelInfo');
+const hint = document.getElementById('hint');
 let width = window.innerWidth, height = window.innerHeight;
-const engine = Engine.create({ gravity: { x: 0, y: 0.25 }, enableSleeping: false });
+const engine = Engine.create({ gravity: { x: 0, y: 0 }, enableSleeping: false });
 const render = Render.create({ canvas, engine, options: { width, height, background: '#0e0e11', wireframes: false, pixelRatio: window.devicePixelRatio || 1 } });
 Render.run(render);
 const runner = Runner.create();
 Runner.run(runner, engine);
 const world = engine.world;
-const cardSize = { w: 220, h: 110 };
-const nodes = [
-  { label: 'ABOUT', pos: () => ({ x: width/2 - 240, y: height/2 - 140 }), mass: 1.1, damping: 0.02, restitution: 0.08 },
-  { label: 'PROJECTS', pos: () => ({ x: width/2 + 200, y: height/2 - 60 }), mass: 3.5, damping: 0.04, restitution: 0.05 },
-  { label: 'CONTACT', pos: () => ({ x: width/2 - 40, y: height/2 + 190 }), mass: 1.0, damping: 0.025, restitution: 0.08 },
-  { label: 'SETTINGS', pos: () => ({ x: width/2 + 60, y: height/2 + 40 }), mass: 2.2, damping: 0.1, restitution: 0.04 },
-  { label: 'STATUS', pos: () => ({ x: width/2 - 160, y: height/2 + 40 }), mass: 0.7, damping: 0.02, restitution: 0.1 }
+const typeConfig = {
+  core: { radius: 52, color: '#1a1c21', mass: 50, damping: 0.25, static: true },
+  light: { radius: 20, color: '#dce2f5', mass: 3, damping: 0.02 },
+  medium: { radius: 28, color: '#aeb6cc', mass: 7, damping: 0.04 },
+  heavy: { radius: 36, color: '#6c7388', mass: 16, damping: 0.08 }
+};
+const levels = [
+  { zone: { x: () => width*0.78, y: () => height*0.45, r: 120 }, goal: 1, nodes: [
+      { type:'core', pos: ()=>({x: width*0.4, y: height*0.5}) },
+      { type:'light', required:true, pos: ()=>({x: width*0.3, y: height*0.4}) },
+      { type:'light', pos: ()=>({x: width*0.5, y: height*0.5}) }
+    ],
+    links:[[0,1],[0,2],[1,2]], stiffness:0.02, slack:1.5 },
+  { zone: { x: () => width*0.72, y: () => height*0.5, r: 100 }, goal: 2, nodes: [
+      { type:'core', pos: ()=>({x: width*0.38, y: height*0.5}) },
+      { type:'light', required:true, pos: ()=>({x: width*0.3, y: height*0.35}) },
+      { type:'light', required:true, pos: ()=>({x: width*0.45, y: height*0.35}) },
+      { type:'light', pos: ()=>({x: width*0.32, y: height*0.62}) },
+      { type:'medium', pos: ()=>({x: width*0.48, y: height*0.62}) }
+    ],
+    links:[[0,1],[0,2],[0,3],[0,4],[1,2],[2,4],[3,4],[1,3]], stiffness:0.024, slack:1.4 },
+  { zone: { x: () => width*0.75, y: () => height*0.45, r: 90 }, goal: 3, nodes: [
+      { type:'core', pos: ()=>({x: width*0.35, y: height*0.52}) },
+      { type:'light', required:true, pos: ()=>({x: width*0.27, y: height*0.38}) },
+      { type:'light', pos: ()=>({x: width*0.45, y: height*0.35}) },
+      { type:'medium', required:true, pos: ()=>({x: width*0.25, y: height*0.62}) },
+      { type:'medium', pos: ()=>({x: width*0.46, y: height*0.62}) },
+      { type:'heavy', required:true, pos: ()=>({x: width*0.38, y: height*0.74}) }
+    ],
+    links:[[0,1],[0,2],[0,3],[0,4],[0,5],[1,2],[2,4],[3,4],[3,5],[1,3],[2,5]], stiffness:0.028, slack:1.35 },
+  { zone: { x: () => width*0.76, y: () => height*0.52, r: 80 }, goal: 4, nodes: [
+      { type:'core', pos: ()=>({x: width*0.34, y: height*0.5}) },
+      { type:'light', required:true, pos: ()=>({x: width*0.24, y: height*0.36}) },
+      { type:'light', required:true, pos: ()=>({x: width*0.48, y: height*0.36}) },
+      { type:'medium', required:true, pos: ()=>({x: width*0.22, y: height*0.6}) },
+      { type:'medium', pos: ()=>({x: width*0.46, y: height*0.6}) },
+      { type:'heavy', required:true, pos: ()=>({x: width*0.32, y: height*0.72}) },
+      { type:'heavy', pos: ()=>({x: width*0.5, y: height*0.72}) }
+    ],
+    links:[[0,1],[0,2],[0,3],[0,4],[0,5],[0,6],[1,2],[1,3],[2,4],[3,4],[4,6],[5,6],[2,5],[1,5]], stiffness:0.032, slack:1.28 },
+  { zone: { x: () => width*0.72, y: () => height*0.48, r: 70 }, goal: 8, nodes: [
+      { type:'core', pos: ()=>({x: width*0.33, y: height*0.5}) },
+      { type:'light', required:true, pos: ()=>({x: width*0.2, y: height*0.34}) },
+      { type:'light', required:true, pos: ()=>({x: width*0.46, y: height*0.34}) },
+      { type:'light', required:true, pos: ()=>({x: width*0.24, y: height*0.62}) },
+      { type:'medium', required:true, pos: ()=>({x: width*0.42, y: height*0.62}) },
+      { type:'medium', required:true, pos: ()=>({x: width*0.18, y: height*0.46}) },
+      { type:'medium', required:true, pos: ()=>({x: width*0.5, y: height*0.46}) },
+      { type:'heavy', required:true, pos: ()=>({x: width*0.3, y: height*0.72}) },
+      { type:'heavy', required:true, pos: ()=>({x: width*0.46, y: height*0.72}) }
+    ],
+    links:[[0,1],[0,2],[0,3],[0,4],[0,5],[0,6],[0,7],[0,8],[1,2],[1,5],[2,6],[3,4],[3,7],[4,8],[5,6],[6,8],[4,7],[2,4],[1,3]], stiffness:0.035, slack:1.22 }
 ];
-const bodies = nodes.map((n, i) => {
-  const p = n.pos();
-  const b = Bodies.rectangle(p.x, p.y, cardSize.w, cardSize.h, { chamfer: { radius: 16 }, mass: n.mass, frictionAir: n.damping, restitution: n.restitution, render: { visible: false } });
-  b.cardLabel = n.label;
-  b.personality = n.label.toLowerCase();
-  return b;
-});
-Composite.add(world, bodies);
-const connectionDefs = [
-  [0,1],[1,3],[3,2],[2,4],[4,0],[0,3],[1,2]
-];
-let fatigueMemory = {};
-let constraints = [];
-function baseLen(a,b){ return Vector.magnitude(Vector.sub(a.position,b.position)); }
-function makeConstraint(aIndex,bIndex,weaken=1){
-  const a = bodies[aIndex], b = bodies[bIndex];
-  const length = baseLen(a,b);
-  const personalityFactor = {
-    about: { stiffness:0.012, damping:0.08, slack:1.25 },
-    projects: { stiffness:0.035, damping:0.12, slack:1.2 },
-    contact: { stiffness:0.018, damping:0.06, slack:1.1 },
-    settings: { stiffness:0.024, damping:0.14, slack:1.18 },
-    status: { stiffness:0.01, damping:0.04, slack:1.35 }
-  };
-  const key = `${aIndex}-${bIndex}`;
-  const fatigue = fatigueMemory[key] || 1;
-  const slack = Math.min(personalityFactor[a.personality]?.slack || 1.2, personalityFactor[b.personality]?.slack || 1.2) * weaken * fatigue;
-  const stiffness = ((personalityFactor[a.personality]?.stiffness || 0.02) + (personalityFactor[b.personality]?.stiffness || 0.02)) / 2;
-  const damping = ((personalityFactor[a.personality]?.damping || 0.08) + (personalityFactor[b.personality]?.damping || 0.08)) / 2;
-  const c = Constraint.create({ bodyA:a, bodyB:b, length, stiffness, damping, render:{ visible:false } });
-  c.restLength = length;
-  c.maxLength = length * slack;
-  c.key = key;
-  c.weaken = weaken;
-  c.vibration = 0;
-  constraints.push(c);
-  Composite.add(world,c);
-}
-connectionDefs.forEach(([a,b])=> makeConstraint(a,b));
+let bodies = [], constraints = [], debris = [];
+let draggingBody = null, currentLevel = 0, state = 'playing';
 const mouse = Mouse.create(render.canvas);
 const mouseConstraint = MouseConstraint.create(engine, { mouse, constraint: { stiffness: 0.2, damping: 0.25, render: { visible:false } } });
 Composite.add(world, mouseConstraint);
 render.mouse = mouse;
-let draggingBody = null;
-Events.on(mouseConstraint, 'startdrag', e => { draggingBody = e.body; });
+Events.on(mouseConstraint, 'startdrag', e => {
+  if(e.body === coreBody){
+    mouseConstraint.body = null;
+    mouseConstraint.constraint.bodyB = null;
+  } else {
+    draggingBody = e.body;
+  }
+});
 Events.on(mouseConstraint, 'enddrag', () => { draggingBody = null; });
-let debris = [];
+let coreBody = null;
+function createNode(def){
+  const cfg = typeConfig[def.type];
+  const p = def.pos();
+  const options = { mass: cfg.mass, frictionAir: cfg.damping, friction: 0.01, restitution: 0.08, render:{ visible:false } };
+  let body = Bodies.circle(p.x, p.y, cfg.radius, options);
+  if(cfg.static){ Body.setStatic(body, true); }
+  body.nodeType = def.type;
+  body.required = !!def.required;
+  return body;
+}
+function createConstraint(aIndex,bIndex,baseStiff,slack){
+  const a=bodies[aIndex], b=bodies[bIndex];
+  const length = Vector.magnitude(Vector.sub(a.position,b.position));
+  const weightFactor = (typeConfig[a.nodeType].mass + typeConfig[b.nodeType].mass)/40;
+  const stiffness = baseStiff / Math.max(1, weightFactor);
+  const damping = 0.08 + weightFactor*0.02;
+  const c = Constraint.create({ bodyA:a, bodyB:b, length, stiffness, damping, render:{ visible:false } });
+  c.restLength = length;
+  c.maxLength = length * slack * (a.nodeType==='heavy'||b.nodeType==='heavy' ? 1.08 : 1.2);
+  c.vibration = 0;
+  constraints.push(c);
+  Composite.add(world,c);
+}
+function buildLevel(idx){
+  state='playing';
+  overlay.style.opacity = 0;
+  hint.textContent='';
+  Composite.clear(world, false);
+  bodies=[]; constraints=[]; debris=[]; draggingBody=null;
+  const def = levels[idx];
+  def.nodes.forEach(n=>{ const body=createNode(n); bodies.push(body); });
+  bodies.forEach(b=>Composite.add(world,b));
+  coreBody = bodies.find(b=>b.nodeType==='core');
+  def.links.forEach(([a,b])=>createConstraint(a,b, def.stiffness, def.slack));
+  engine.gravity.y = 0;
+  engine.timing.timeScale = 1;
+  levelInfo.textContent = `Level ${idx+1} / ${levels.length}`;
+  hint.textContent = `Move ${def.goal} target node${def.goal>1?'s':''} into the glow`;
+}
 function fracture(c){
-  const a = c.bodyA.position, b = c.bodyB.position;
-  const pieces = 12;
+  const a = c.bodyA.position, b = c.bodyB.position; const pieces = 10;
   for(let i=0;i<pieces;i++){
     const t=i/pieces; const pos={ x:a.x+(b.x-a.x)*t, y:a.y+(b.y-a.y)*t };
-    const vel={ x:(Math.random()-0.5)*2, y:(Math.random()-0.5)*2-1.2 };
-    debris.push({ pos, vel, life:1, color:`rgba(255,${180+i*3},${120+i*2},1)` });
+    const vel={ x:(Math.random()-0.5)*3, y:(Math.random()-0.5)*3 };
+    debris.push({ pos, vel, life:1, color:`rgba(255,${160+i*4},120,1)` });
   }
 }
-function drawCard(body){
+function drawTarget(zone){
   const ctx = render.context;
-  const { position, angle } = body;
   ctx.save();
-  ctx.translate(position.x, position.y);
-  ctx.rotate(angle);
-  ctx.shadowColor='rgba(0,0,0,0.35)';
-  ctx.shadowBlur=18;
-  ctx.shadowOffsetY=6;
-  const w=cardSize.w, h=cardSize.h, r=16;
-  ctx.fillStyle='#e3e6eb';
+  ctx.strokeStyle='rgba(120,185,255,0.5)';
+  ctx.lineWidth=3;
+  ctx.shadowBlur=20;
+  ctx.shadowColor='rgba(120,185,255,0.4)';
   ctx.beginPath();
-  ctx.moveTo(-w/2+r,-h/2);
-  ctx.lineTo(w/2-r,-h/2);
-  ctx.quadraticCurveTo(w/2,-h/2,w/2,-h/2+r);
-  ctx.lineTo(w/2,h/2-r);
-  ctx.quadraticCurveTo(w/2,h/2,w/2-r,h/2);
-  ctx.lineTo(-w/2+r,h/2);
-  ctx.quadraticCurveTo(-w/2,h/2,-w/2,h/2-r);
-  ctx.lineTo(-w/2,-h/2+r);
-  ctx.quadraticCurveTo(-w/2,-h/2,-w/2+r,-h/2);
-  ctx.closePath();
-  ctx.fill();
-  ctx.shadowBlur=0;
-  ctx.fillStyle='#0f1117';
-  ctx.font='700 20px "Inter", "Segoe UI", system-ui';
-  ctx.textAlign='center';
-  ctx.textBaseline='middle';
-  ctx.fillText(body.cardLabel,0,0);
+  ctx.arc(zone.x(), zone.y(), zone.r, 0, Math.PI*2);
+  ctx.stroke();
   ctx.restore();
+}
+function drawNodes(){
+  const ctx = render.context;
+  bodies.forEach(body=>{
+    const cfg = typeConfig[body.nodeType];
+    ctx.save();
+    ctx.translate(body.position.x, body.position.y);
+    ctx.rotate(body.angle);
+    ctx.shadowColor='rgba(0,0,0,0.35)';
+    ctx.shadowBlur=14; ctx.shadowOffsetY=4;
+    ctx.fillStyle = cfg.color;
+    ctx.beginPath();
+    ctx.arc(0,0,cfg.radius,0,Math.PI*2);
+    ctx.fill();
+    if(body.required){
+      ctx.strokeStyle='rgba(255,210,120,0.8)';
+      ctx.lineWidth=3;
+      ctx.beginPath();
+      ctx.arc(0,0,cfg.radius+4,0,Math.PI*2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  });
 }
 function drawDebris(){
   const ctx = render.context;
   debris = debris.filter(d=>d.life>0);
   debris.forEach(d=>{
-    d.vel.y += 0.18; d.vel.x *= 0.995;
+    d.vel.y += 0.03; d.vel.x *= 0.995;
     d.pos.x += d.vel.x; d.pos.y += d.vel.y;
     d.life -= 0.02;
     ctx.save();
@@ -134,7 +196,7 @@ function drawDebris(){
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(d.pos.x, d.pos.y);
-    ctx.lineTo(d.pos.x + d.vel.x*2, d.pos.y + d.vel.y*0.6);
+    ctx.lineTo(d.pos.x + d.vel.x*2, d.pos.y + d.vel.y*2);
     ctx.stroke();
     ctx.restore();
   });
@@ -145,16 +207,16 @@ function drawConstraints(){
     if(!c.bodyA||!c.bodyB) return;
     const a=c.bodyA.position, b=c.bodyB.position;
     const dist = Vector.magnitude(Vector.sub(a,b));
-    const tension = Math.max(0, dist - c.restLength);
-    const ratio = Math.min(1.5, dist / c.maxLength);
-    c.vibration = c.vibration*0.85 + (ratio>0.9 ? 1.2 : 0.3)*ratio;
-    const hue = 210 - Math.min(80, (dist/c.restLength-1)*120);
-    const alpha = 0.35 + Math.min(0.5, tension/ (c.maxLength*0.8));
-    const jitter = (Math.random()-0.5)*c.vibration*2;
+    const ratio = dist / c.restLength;
+    const stress = Math.max(0, dist - c.restLength);
+    c.vibration = c.vibration*0.82 + (ratio>1 ? ratio*1.4 : ratio*0.2);
+    const jitter = (Math.random()-0.5) * c.vibration;
     const mid = { x:(a.x+b.x)/2 + jitter, y:(a.y+b.y)/2 - jitter };
+    const hue = 210 - Math.min(160, (dist/c.maxLength)*200);
+    const alpha = 0.3 + Math.min(0.5, stress/(c.maxLength*0.7));
     ctx.save();
-    ctx.strokeStyle = `hsla(${hue},85%,65%,${alpha})`;
-    ctx.lineWidth = 2 + (ratio>1? (ratio-1)*5: ratio*1.2);
+    ctx.strokeStyle = `hsla(${hue},85%,70%,${alpha})`;
+    ctx.lineWidth = 1.8 + Math.min(5, (ratio-1)*6);
     ctx.shadowBlur = 12;
     ctx.shadowColor = `hsla(${hue},95%,70%,${alpha})`;
     ctx.beginPath();
@@ -164,37 +226,6 @@ function drawConstraints(){
     ctx.restore();
   });
   drawDebris();
-}
-let stabilityState = 'STABLE';
-let stabilityValue = 1;
-function updateStability(agg){
-  const intactRatio = constraints.length / (connectionDefs.length + rebuiltCount);
-  const tensionSum = constraints.reduce((s,c)=>{ const d=Vector.magnitude(Vector.sub(c.bodyA.position,c.bodyB.position)); return s + Math.max(0,d-c.restLength); },0);
-  stabilityValue = Math.max(0, Math.min(1, intactRatio*0.6 + Math.exp(-tensionSum*0.002)*0.4 - agg*0.15));
-  if(stabilityValue>0.7) stabilityState='STABLE';
-  else if(stabilityValue>0.45) stabilityState='STRAINED';
-  else if(stabilityValue>0.2) stabilityState='UNSTABLE';
-  else stabilityState='COLLAPSE';
-  statusText.style.opacity = stabilityState==='UNSTABLE' || stabilityState==='COLLAPSE' ? 1 : 0;
-  if(stabilityState==='STRAINED') engine.gravity.y = 0.35;
-  else if(stabilityState==='UNSTABLE') engine.gravity.y = 0.55;
-  else if(stabilityState==='COLLAPSE') engine.gravity.y = 0.7;
-  else engine.gravity.y = 0.25;
-}
-let rebuiltCount = 0;
-function checkSprings(){
-  for(let i=constraints.length-1;i>=0;i--){
-    const c=constraints[i];
-    if(!c.bodyA||!c.bodyB) { constraints.splice(i,1); continue; }
-    const dist = Vector.magnitude(Vector.sub(c.bodyA.position,c.bodyB.position));
-    if(!draggingBody) continue;
-    if(dist > c.maxLength){
-      fracture(c);
-      fatigueMemory[c.key] = (fatigueMemory[c.key]||1)*0.94;
-      Composite.remove(world,c);
-      constraints.splice(i,1);
-    }
-  }
 }
 function applyDragResistance(){
   if(!draggingBody) return;
@@ -210,40 +241,76 @@ function applyDragResistance(){
     }
   });
 }
-let repairTracker = {};
-function tryRepair(){
-  for(let i=0;i<bodies.length;i++){
-    for(let j=i+1;j<bodies.length;j++){
-      const key=`${i}-${j}`;
-      if(constraints.find(c=>c.key===key)) continue;
-      const dist = Vector.magnitude(Vector.sub(bodies[i].position,bodies[j].position));
-      const relVel = Vector.magnitude(Vector.sub(bodies[i].velocity,bodies[j].velocity));
-      if(dist<140 && relVel<0.6){
-        repairTracker[key] = (repairTracker[key]||0) + 1;
-        if(repairTracker[key]>50){
-          fatigueMemory[key] = (fatigueMemory[key]||1)*0.92;
-          makeConstraint(i,j,0.92);
-          rebuiltCount++;
-          repairTracker[key]=0;
-        }
-      } else {
-        repairTracker[key]=0;
-      }
+function checkBreaks(){
+  if(!draggingBody) return;
+  for(let i=constraints.length-1;i>=0;i--){
+    const c = constraints[i];
+    if(!c.bodyA||!c.bodyB) { constraints.splice(i,1); continue; }
+    const dist = Vector.magnitude(Vector.sub(c.bodyA.position,c.bodyB.position));
+    if(dist > c.maxLength){
+      fracture(c);
+      Composite.remove(world, c);
+      constraints.splice(i,1);
     }
   }
 }
-Events.on(engine,'beforeUpdate', ()=>{
-  applyDragResistance();
-  checkSprings();
-});
-Events.on(engine,'afterUpdate', ()=>{
-  tryRepair();
-  const aggression = draggingBody ? Math.min(1, Vector.magnitude(draggingBody.velocity)*0.02) : 0;
-  updateStability(aggression);
-});
-Events.on(render,'afterRender', ()=>{
+function nodesInside(zone){
+  return bodies.filter(b=>!b.isStatic && b.required).filter(b=>{
+    const dx=b.position.x - zone.x(), dy=b.position.y - zone.y();
+    return Math.sqrt(dx*dx+dy*dy) + typeConfig[b.nodeType].radius <= zone.r;
+  }).length;
+}
+function networkIntact(){
+  if(constraints.length===0) return false;
+  const adj = new Map();
+  bodies.forEach((_,i)=>adj.set(i,[]));
+  constraints.forEach(c=>{
+    const ai=bodies.indexOf(c.bodyA), bi=bodies.indexOf(c.bodyB);
+    if(ai>=0&&bi>=0){ adj.get(ai).push(bi); adj.get(bi).push(ai); }
+  });
+  const start = bodies.indexOf(coreBody);
+  const visited = new Set();
+  const stack=[start];
+  while(stack.length){
+    const n=stack.pop();
+    if(visited.has(n)) continue;
+    visited.add(n);
+    adj.get(n).forEach(nb=>{ if(!visited.has(nb)) stack.push(nb); });
+  }
+  return visited.size === bodies.length;
+}
+function checkWinLose(){
+  const def = levels[currentLevel];
+  const inside = nodesInside(def.zone);
+  if(!networkIntact()) { triggerLoss(); return; }
+  if(inside >= def.goal && constraints.length>0){ triggerWin(); }
+}
+function triggerWin(){
+  if(state!=='playing') return;
+  state='win';
+  const last = currentLevel >= levels.length-1;
+  overlay.textContent = last ? 'System mastered' : 'Balanced';
+  overlay.style.opacity = 1;
+  engine.timing.timeScale = 0.9;
+  setTimeout(()=>{ currentLevel = last ? 0 : currentLevel+1; buildLevel(currentLevel); }, 900);
+}
+function triggerLoss(){
+  if(state!=='playing') return;
+  state='lose';
+  overlay.textContent = 'Network failed';
+  overlay.style.opacity = 1;
+  engine.timing.timeScale = 0.4;
+  setTimeout(()=>{ engine.timing.timeScale = 1; buildLevel(currentLevel); }, 800);
+}
+Events.on(engine, 'beforeUpdate', ()=>{ applyDragResistance(); checkBreaks(); });
+Events.on(engine, 'afterUpdate', ()=>{ checkWinLose(); });
+Events.on(render, 'afterRender', ()=>{
+  render.context.clearRect(0,0,width,height);
+  render.context.fillStyle='#0e0e11';
+  render.context.fillRect(0,0,width,height);
+  drawTarget(levels[currentLevel].zone);
   drawConstraints();
-  bodies.forEach(drawCard);
+  drawNodes();
 });
 window.addEventListener('resize', ()=>{
   width=window.innerWidth; height=window.innerHeight;
@@ -251,6 +318,7 @@ window.addEventListener('resize', ()=>{
   render.options.width=width; render.options.height=height;
   render.bounds.max.x=width; render.bounds.max.y=height;
 });
+buildLevel(currentLevel);
 </script>
 </body>
 </html>
