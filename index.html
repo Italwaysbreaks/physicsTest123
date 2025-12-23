@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Physics UI</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0e0e11; font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif; }
+    #canvas { display: block; background: #0e0e11; }
+    #message { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #e7e8ec; font-size: 42px; letter-spacing: 0.5px; opacity: 0; transition: opacity 1.2s ease; pointer-events: none; text-shadow: 0 10px 40px rgba(0,0,0,0.35); }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div id="message">You broke it.</div>
+  <script src="https://cdn.jsdelivr.net/npm/matter-js@0.20.0/build/matter.min.js"></script>
+  <script>
+    const { Engine, Render, Runner, Bodies, Body, Composite, Constraint, Mouse, MouseConstraint, Events, Vector } = Matter;
+
+    const canvas = document.getElementById('canvas');
+    const message = document.getElementById('message');
+    let width = window.innerWidth;
+    let height = window.innerHeight;
+
+    const engine = Engine.create({
+      gravity: { x: 0, y: 0.45 }
+    });
+
+    const render = Render.create({
+      canvas,
+      engine,
+      options: {
+        width,
+        height,
+        background: '#0e0e11',
+        wireframes: false,
+        pixelRatio: window.devicePixelRatio || 1,
+      }
+    });
+
+    Render.run(render);
+    const runner = Runner.create();
+    Runner.run(runner, engine);
+
+    const world = engine.world;
+
+    const anchor = Bodies.circle(width / 2, height / 2, 6, {
+      isStatic: true,
+      render: { visible: false }
+    });
+    Composite.add(world, anchor);
+
+    const cardSize = { w: 220, h: 110 };
+    const cards = [
+      { label: 'ABOUT', pos: { x: width / 2 - 240, y: height / 2 - 120 } },
+      { label: 'PROJECTS', pos: { x: width / 2 + 40, y: height / 2 - 20 } },
+      { label: 'CONTACT', pos: { x: width / 2 - 80, y: height / 2 + 170 } },
+    ].map((card) => {
+      const body = Bodies.rectangle(card.pos.x, card.pos.y, cardSize.w, cardSize.h, {
+        chamfer: { radius: 18 },
+        mass: 2,
+        frictionAir: 0.025,
+        render: { visible: false }
+      });
+      body.cardLabel = card.label;
+      return body;
+    });
+
+    Composite.add(world, cards);
+
+    const constraints = cards.map((card) => Constraint.create({
+      bodyA: anchor,
+      pointA: { x: 0, y: 0 },
+      bodyB: card,
+      pointB: { x: 0, y: 0 },
+      stiffness: 0.012,
+      damping: 0.08,
+      length: 40,
+      render: {
+        strokeStyle: 'rgba(255,255,255,0.5)',
+        lineWidth: 2,
+        visible: false,
+      }
+    }));
+
+    constraints.forEach((c) => Composite.add(world, c));
+
+    const mouse = Mouse.create(render.canvas);
+    const mouseConstraint = MouseConstraint.create(engine, {
+      mouse,
+      constraint: {
+        stiffness: 0.16,
+        damping: 0.22,
+        render: { visible: false }
+      }
+    });
+    Composite.add(world, mouseConstraint);
+    render.mouse = mouse;
+
+    let shakeTimer = 0;
+    let collapsed = false;
+    let maxLength = Math.min(320, Math.max(width, height) * 0.35);
+
+    function triggerShake() {
+      shakeTimer = 18;
+    }
+
+    function startCollapse() {
+      collapsed = true;
+      message.style.opacity = 1;
+    }
+
+    function drawCard(body) {
+      const ctx = render.context;
+      const { position, angle } = body;
+      const w = cardSize.w;
+      const h = cardSize.h;
+      ctx.save();
+      ctx.translate(position.x, position.y);
+      ctx.rotate(angle);
+      ctx.shadowColor = 'rgba(0,0,0,0.35)';
+      ctx.shadowBlur = 18;
+      ctx.shadowOffsetY = 6;
+      const r = 18;
+      ctx.fillStyle = '#e3e6eb';
+      ctx.beginPath();
+      ctx.moveTo(-w/2 + r, -h/2);
+      ctx.lineTo(w/2 - r, -h/2);
+      ctx.quadraticCurveTo(w/2, -h/2, w/2, -h/2 + r);
+      ctx.lineTo(w/2, h/2 - r);
+      ctx.quadraticCurveTo(w/2, h/2, w/2 - r, h/2);
+      ctx.lineTo(-w/2 + r, h/2);
+      ctx.quadraticCurveTo(-w/2, h/2, -w/2, h/2 - r);
+      ctx.lineTo(-w/2, -h/2 + r);
+      ctx.quadraticCurveTo(-w/2, -h/2, -w/2 + r, -h/2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#101117';
+      ctx.font = '700 20px "Inter", "Segoe UI", system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(body.cardLabel, 0, 0);
+      ctx.restore();
+    }
+
+    function drawConstraints() {
+      const ctx = render.context;
+      constraints.forEach((c) => {
+        if (!c || !c.bodyB) return;
+        const a = anchor.position;
+        const b = c.bodyB.position;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        ctx.lineWidth = 2;
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = 'rgba(255,255,255,0.35)';
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+        ctx.restore();
+      });
+    }
+
+    Events.on(engine, 'afterUpdate', () => {
+      for (let i = constraints.length - 1; i >= 0; i--) {
+        const c = constraints[i];
+        if (!c || !c.bodyB) {
+          constraints.splice(i, 1);
+          continue;
+        }
+        const dist = Vector.magnitude(Vector.sub(c.bodyB.position, anchor.position));
+        if (dist > maxLength) {
+          Composite.remove(world, c);
+          constraints.splice(i, 1);
+          triggerShake();
+        }
+      }
+      if (!collapsed && constraints.length === 0) {
+        startCollapse();
+      }
+      if (collapsed) {
+        engine.gravity.y = Math.min(3.6, engine.gravity.y + 0.03);
+      }
+    });
+
+    Events.on(render, 'afterRender', () => {
+      drawConstraints();
+      cards.forEach(drawCard);
+      if (shakeTimer > 0) {
+        const intensity = shakeTimer / 18;
+        const dx = (Math.random() - 0.5) * 12 * intensity;
+        const dy = (Math.random() - 0.5) * 12 * intensity;
+        render.canvas.style.transform = `translate(${dx}px, ${dy}px)`;
+        shakeTimer -= 1;
+      } else {
+        render.canvas.style.transform = 'translate(0,0)';
+      }
+    });
+
+    function handleResize() {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      render.canvas.width = width;
+      render.canvas.height = height;
+      render.options.width = width;
+      render.options.height = height;
+      render.bounds.max.x = width;
+      render.bounds.max.y = height;
+      Body.setPosition(anchor, { x: width / 2, y: height / 2 });
+      maxLength = Math.min(320, Math.max(width, height) * 0.35);
+    }
+
+    window.addEventListener('resize', handleResize);
+  </script>
+</body>
+</html>
