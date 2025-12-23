@@ -8,10 +8,12 @@
 :root { color-scheme: dark; }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0e0e11; font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif; }
-#canvas { display: block; background: #0e0e11; }
+.ui-layer { pointer-events: none; }
+#canvas { display: block; background: #0e0e11; pointer-events: auto; }
 .overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #e8e9ee; font-size: 24px; letter-spacing: 0.5px; opacity: 0; transition: opacity 0.5s ease; pointer-events: none; text-shadow: 0 8px 40px rgba(0,0,0,0.45); text-align: center; }
 .hint { position: fixed; bottom: 22px; left: 24px; color: #9fa4b4; font-size: 14px; letter-spacing: 0.4px; opacity: 0.8; }
 #levelInfo { position: fixed; top: 18px; left: 22px; color: #cfd3df; font-size: 15px; letter-spacing: 0.3px; opacity: 0.9; }
+#instructions { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #cfd3df; font-size: 18px; letter-spacing: 0.4px; opacity: 0; transition: opacity 0.6s ease; text-align: center; text-shadow: 0 10px 40px rgba(0,0,0,0.55); pointer-events: none; }
 </style>
 </head>
 <body>
@@ -19,6 +21,7 @@ html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
 <div id="overlay" class="overlay"></div>
 <div id="levelInfo"></div>
 <div id="hint" class="hint"></div>
+<div id="instructions" class="ui-layer"></div>
 <script src="https://cdn.jsdelivr.net/npm/matter-js@0.20.0/build/matter.min.js"></script>
 <script>
 const { Engine, Render, Runner, Bodies, Body, Composite, Constraint, Mouse, MouseConstraint, Events, Vector } = Matter;
@@ -26,6 +29,7 @@ const canvas = document.getElementById('canvas');
 const overlay = document.getElementById('overlay');
 const levelInfo = document.getElementById('levelInfo');
 const hint = document.getElementById('hint');
+const instructions = document.getElementById('instructions');
 let width = window.innerWidth, height = window.innerHeight;
 const engine = Engine.create({ gravity: { x: 0, y: 0 }, enableSleeping: false });
 const render = Render.create({ canvas, engine, options: { width, height, background: '#0e0e11', wireframes: false, pixelRatio: window.devicePixelRatio || 1 } });
@@ -39,6 +43,14 @@ const typeConfig = {
   medium: { radius: 28, color: '#aeb6cc', mass: 7, damping: 0.04 },
   heavy: { radius: 36, color: '#6c7388', mass: 16, damping: 0.08 }
 };
+const instructionTexts = [
+  "Click and drag a node. Keep the structure intact.",
+  "Moving one node affects the others.",
+  "Heavier nodes resist movement.",
+  "Some connections will break if pushed too far.",
+  "Balance everything."
+];
+
 const levels = [
   { zone: { x: () => width*0.78, y: () => height*0.45, r: 120 }, goal: 1, nodes: [
       { type:'core', pos: ()=>({x: width*0.4, y: height*0.5}) },
@@ -87,18 +99,23 @@ const levels = [
     links:[[0,1],[0,2],[0,3],[0,4],[0,5],[0,6],[0,7],[0,8],[1,2],[1,5],[2,6],[3,4],[3,7],[4,8],[5,6],[6,8],[4,7],[2,4],[1,3]], stiffness:0.035, slack:1.22 }
 ];
 let bodies = [], constraints = [], debris = [];
-let draggingBody = null, currentLevel = 0, state = 'playing';
+let draggingBody = null, currentLevel = 0, state = 'playing', instructionActive = false;
 const mouse = Mouse.create(render.canvas);
+mouse.element = render.canvas;
+mouse.pixelRatio = render.options.pixelRatio;
 const mouseConstraint = MouseConstraint.create(engine, { mouse, constraint: { stiffness: 0.2, damping: 0.25, render: { visible:false } } });
 Composite.add(world, mouseConstraint);
 render.mouse = mouse;
 Events.on(mouseConstraint, 'startdrag', e => {
-  if(e.body === coreBody){
+  const target = e.body;
+  if(!target) return;
+  if(target.label === 'core' || target === coreBody){
     mouseConstraint.body = null;
     mouseConstraint.constraint.bodyB = null;
-  } else {
-    draggingBody = e.body;
+    return;
   }
+  draggingBody = target;
+  if(instructionActive){ instructions.style.opacity = 0; instructionActive = false; }
 });
 Events.on(mouseConstraint, 'enddrag', () => { draggingBody = null; });
 let coreBody = null;
@@ -108,6 +125,7 @@ function createNode(def){
   const options = { mass: cfg.mass, frictionAir: cfg.damping, friction: 0.01, restitution: 0.08, render:{ visible:false } };
   let body = Bodies.circle(p.x, p.y, cfg.radius, options);
   if(cfg.static){ Body.setStatic(body, true); }
+  body.label = def.type;
   body.nodeType = def.type;
   body.required = !!def.required;
   return body;
@@ -140,6 +158,9 @@ function buildLevel(idx){
   engine.timing.timeScale = 1;
   levelInfo.textContent = `Level ${idx+1} / ${levels.length}`;
   hint.textContent = `Move ${def.goal} target node${def.goal>1?'s':''} into the glow`;
+  instructions.textContent = instructionTexts[idx];
+  instructions.style.opacity = 1;
+  instructionActive = true;
 }
 function fracture(c){
   const a = c.bodyA.position, b = c.bodyB.position; const pieces = 10;
