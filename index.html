@@ -181,6 +181,7 @@ function buildLevel(idx){
   overlay.style.opacity = 0;
   hint.textContent='';
   Composite.clear(world, false);
+  Composite.add(world, mouseConstraint);
   bodies=[]; constraints=[]; debris=[]; draggingBody=null;
   const def = levels[idx];
   def.nodes.forEach(n=>{ const body=createNode(n); bodies.push(body); });
