@@ -102,7 +102,7 @@ let bodies = [], constraints = [], debris = [];
 let draggingBody = null, currentLevel = 0, state = 'playing', instructionActive = false;
 const mouse = Mouse.create(render.canvas);
 mouse.element = render.canvas;
-mouse.pixelRatio = render.options.pixelRatio;
+mouse.pixelRatio = render.options.pixelRatio || window.devicePixelRatio;
 const mouseConstraint = MouseConstraint.create(engine, { mouse, constraint: { stiffness: 0.2, damping: 0.25, render: { visible:false } } });
 Composite.add(world, mouseConstraint);
 render.mouse = mouse;
